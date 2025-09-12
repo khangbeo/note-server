@@ -1,9 +1,7 @@
 const express = require("express");
-const cors = require("cors");
 const app = express();
 
-app.use(express.static("dist"));
-app.use(cors());
+app.use(express.static("dist")); // if you copy the minified build to the root and use express middle static, you can serve static files from the server, letting you use the same url for both frontend and backend
 app.use(express.json());
 
 let notes = [
