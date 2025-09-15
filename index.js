@@ -1,71 +1,103 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
+const Note = require("./models/note");
 
 app.use(express.static("dist")); // if you copy the minified build to the root and use express middle static, you can serve static files from the server, letting you use the same url for both frontend and backend
 app.use(express.json());
 
-let notes = [
-  {
-    id: "1",
-    content: "HTML is easy",
-    important: true,
-  },
-  {
-    id: "2",
-    content: "Browser can execute only JavaScript",
-    important: false,
-  },
-  {
-    id: "3",
-    content: "GET and POST are the most important methods of HTTP protocol",
-    important: true,
-  },
-];
+// let notes = [
+//   {
+//     id: "1",
+//     content: "HTML is easy",
+//     important: true,
+//   },
+//   {
+//     id: "2",
+//     content: "Browser can execute only JavaScript",
+//     important: false,
+//   },
+//   {
+//     id: "3",
+//     content: "GET and POST are the most important methods of HTTP protocol",
+//     important: true,
+//   },
+// ];
 
 app.get("/", (req, res) => {
   res.send("<h1>Hello world!</h1>");
 });
 
 app.get("/api/notes", (req, res) => {
-  res.json(notes);
+  Note.find({}).then((notes) => {
+    res.json(notes);
+  });
 });
 
 app.get("/api/notes/:id", (req, res) => {
   const id = req.params.id;
-  const note = notes.find((n) => n.id === id);
-  if (note) {
-    res.json(note);
-  } else {
-    res.status(404).end();
-  }
+  Note.findById(id)
+    .then((note) => {
+      res.json(note);
+    })
+    .catch((e) => {
+      res.status(404).json({ error: "Note not found" });
+    });
+  // const note = notes.find((n) => n.id === id);
+  // if (note) {
+  //   res.json(note);
+  // } else {
+  //   res.status(404).end();
+  // }
 });
 
 app.put("/api/notes/:id", (req, res) => {
   const id = req.params.id;
   const body = req.body;
 
-  const index = notes.findIndex((n) => n.id === id);
+  Note.findByIdAndUpdate(
+    id,
+    { $set: { important: body.important || false } },
+    { new: true, runValidators: true }
+  )
+    .then((updatedItem) => {
+      if (!updatedItem) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+      console.log("Item updated successfully: ", updatedItem);
+      res.json(updatedItem);
+    })
+    .catch((e) => {
+      console.error("Error updating file: ", error);
+    });
 
-  if (index === -1) {
-    return res.status(404).json({ error: "Note not found " });
-  }
+  // const index = notes.findIndex((n) => n.id === id);
 
-  notes[index] = { ...notes[index], ...body };
+  // if (index === -1) {
+  //   return res.status(404).json({ error: "Note not found" });
+  // }
 
-  res.json(notes[index]);
+  // notes[index] = { ...notes[index], ...body };
+
+  // res.json(notes[index]);
 });
 
 app.delete("/api/notes/:id", (req, res) => {
   const id = req.params.id;
-  notes.filter((n) => n.id !== id);
+  Note.findByIdAndDelete(id).then((note) => {
+    if (!note) res.status(404).json({ error: "Error deleting file" });
+  });
   res.status(204).end();
+
+  // notes.filter((n) => n.id !== id);
 });
 
-const generateId = () => {
-  const maxId =
-    notes.length > 0 ? Math.max(...notes.map((n) => Number(n.id))) : 0;
-  return String(maxId + 1);
-};
+// const generateId = () => {
+//   const maxId =
+//     notes.length > 0 ? Math.max(...notes.map((n) => Number(n.id))) : 0;
+//   return String(maxId + 1);
+// };
 
 app.post("/api/notes", (req, res) => {
   const body = req.body;
@@ -76,14 +108,14 @@ app.post("/api/notes", (req, res) => {
     });
   }
 
-  const note = {
+  const note = new Note({
     content: body.content,
     important: body.important || false,
-    id: generateId(),
-  };
+  });
 
-  notes.concat(note);
-  res.json(note);
+  note.save().then((savedNote) => {
+    res.json(savedNote);
+  });
 });
 
 const PORT = process.env.PORT || 3001;
