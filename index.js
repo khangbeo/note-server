@@ -1,10 +1,21 @@
 require("dotenv").config();
 const express = require("express");
+const morgan = require("morgan");
 const app = express();
 const Note = require("./models/note");
+const unknownEndpoint = require("./middlewares/unknownEndpoint");
+const errorHandler = require("./middlewares/errorHandler");
 
 app.use(express.static("dist")); // if you copy the minified build to the root and use express middle static, you can serve static files from the server, letting you use the same url for both frontend and backend
 app.use(express.json());
+
+morgan.token("data", (req) => {
+  return JSON.stringify(req.body);
+});
+
+app.use(
+  morgan(":method :url :status :res[content-length] - :response-time ms :data")
+);
 
 // let notes = [
 //   {
@@ -34,15 +45,18 @@ app.get("/api/notes", (req, res) => {
   });
 });
 
-app.get("/api/notes/:id", (req, res) => {
+app.get("/api/notes/:id", (req, res, next) => {
   const id = req.params.id;
+
   Note.findById(id)
     .then((note) => {
-      res.json(note);
+      if (note) {
+        res.json(note);
+      } else {
+        res.status(404).end();
+      }
     })
-    .catch((e) => {
-      res.status(404).json({ error: "Note not found" });
-    });
+    .catch((error) => next(error));
   // const note = notes.find((n) => n.id === id);
   // if (note) {
   //   res.json(note);
@@ -51,7 +65,7 @@ app.get("/api/notes/:id", (req, res) => {
   // }
 });
 
-app.put("/api/notes/:id", (req, res) => {
+app.put("/api/notes/:id", (req, res, next) => {
   const id = req.params.id;
   const body = req.body;
 
@@ -61,16 +75,28 @@ app.put("/api/notes/:id", (req, res) => {
     { new: true, runValidators: true }
   )
     .then((updatedItem) => {
-      if (!updatedItem) {
+      if (updatedItem) {
+        res.json(updatedItem);
+      } else {
         res.status(404).json({ error: "Note not found" });
-        return;
       }
-      console.log("Item updated successfully: ", updatedItem);
-      res.json(updatedItem);
     })
-    .catch((e) => {
-      console.error("Error updating file: ", error);
-    });
+    .catch((e) => next(e));
+
+  // USING findById
+  // Note.findById(id)
+  //   .then(note => {
+  //     if (!note) {
+  //       return res.status(404).end()
+  //     }
+
+  //     note.content = body.content
+  //     note.important = body.important
+
+  //     return note.save().then((updatedNote) => {
+  //       res.json(updatedNote)
+  //     })
+  //   }).catch(e => next(e))
 
   // const index = notes.findIndex((n) => n.id === id);
 
@@ -83,12 +109,17 @@ app.put("/api/notes/:id", (req, res) => {
   // res.json(notes[index]);
 });
 
-app.delete("/api/notes/:id", (req, res) => {
+app.delete("/api/notes/:id", (req, res, next) => {
   const id = req.params.id;
-  Note.findByIdAndDelete(id).then((note) => {
-    if (!note) res.status(404).json({ error: "Error deleting file" });
-  });
-  res.status(204).end();
+  Note.findByIdAndDelete(id)
+    .then((note) => {
+      if (note) {
+        res.status(204).json({ message: "Deleted note" });
+      } else {
+        res.status(404).json({ error: "Not not found" });
+      }
+    })
+    .catch((e) => next(e));
 
   // notes.filter((n) => n.id !== id);
 });
@@ -99,7 +130,7 @@ app.delete("/api/notes/:id", (req, res) => {
 //   return String(maxId + 1);
 // };
 
-app.post("/api/notes", (req, res) => {
+app.post("/api/notes", (req, res, next) => {
   const body = req.body;
 
   if (!body.content) {
@@ -117,6 +148,10 @@ app.post("/api/notes", (req, res) => {
     res.json(savedNote);
   });
 });
+
+// handler of requests with unknown endpoint
+app.use(unknownEndpoint);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
